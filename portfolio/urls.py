@@ -33,9 +33,6 @@ urlpatterns = [
     path('investment/<int:pk>/delete/', views.investment_delete, name='investment_delete'),
     path('customer/<int:pk>/portfolio/', views.portfolio, name='portfolio'),
     url(r'^customers_json/', views.CustomerList.as_view()),
-    path('customer/<int:pk>/portfolio/pdf/', views.customer_portfolio_pdf, name='customer_portfolio_pdf'),
-    path('customer/<int:pk>/portfolio/email_pdf/', views.customer_portfolio_email_pdf,
-         name='customer_portfolio_email_pdf'),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)
