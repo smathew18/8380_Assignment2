@@ -1,9 +1,9 @@
 from django.conf.urls import url
 from . import views
 from django.urls import path
+from rest_framework.urlpatterns import format_suffix_patterns
 from django.contrib.auth import views as auth_views
 from django.urls import reverse_lazy
-
 
 app_name = 'portfolio'
 urlpatterns = [
@@ -19,8 +19,8 @@ urlpatterns = [
     path('password_reset/done/', auth_views.PasswordResetDoneView.as_view(), name='password_reset_done'),
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(success_url=reverse_lazy('portfolio:password_reset_complete')), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
-
     path('customer_list', views.customer_list, name='customer_list'),
+    path('customer/create/', views.customer_new, name='customer_new'),
     path('customer/<int:pk>/edit/', views.customer_edit, name='customer_edit'),
     path('customer/<int:pk>/delete/', views.customer_delete, name='customer_delete'),
     path('stock_list', views.stock_list, name='stock_list'),
@@ -31,4 +31,11 @@ urlpatterns = [
     path('investment/create/', views.investment_new, name='investment_new'),
     path('investment/<int:pk>/edit/', views.investment_edit, name='investment_edit'),
     path('investment/<int:pk>/delete/', views.investment_delete, name='investment_delete'),
+    path('customer/<int:pk>/portfolio/', views.portfolio, name='portfolio'),
+    url(r'^customers_json/', views.CustomerList.as_view()),
+    path('customer/<int:pk>/portfolio/pdf/', views.customer_portfolio_pdf, name='customer_portfolio_pdf'),
+    path('customer/<int:pk>/portfolio/email_pdf/', views.customer_portfolio_email_pdf,
+         name='customer_portfolio_email_pdf'),
 ]
+
+urlpatterns = format_suffix_patterns(urlpatterns)

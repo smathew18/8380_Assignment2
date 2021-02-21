@@ -1,10 +1,20 @@
+from time import timezone
+
 from django.contrib.auth.decorators import login_required
+from django.core.mail import EmailMessage
+from django.http import HttpResponse,HttpResponseRedirect
 from django.shortcuts import render
+from django.template.loader import get_template
+from django.urls import reverse
+from rest_framework.response import Response
+
 from .models import *
 from .forms import *
 from django.shortcuts import render, get_object_or_404
 from django.shortcuts import redirect
-
+from django.db.models import Sum
+from .serializers import CustomerSerializer
+from rest_framework.views import APIView
 
 now = timezone.now()
 def home(request):
@@ -33,6 +43,25 @@ def customer_list(request):
     customer = Customer.objects.filter(created_date__lte=timezone.now())
     return render(request, 'portfolio/customer_list.html',
                  {'customers': customer})
+
+
+@login_required
+def customer_new(request):
+   if request.method == "POST":
+       form = CustomerForm(request.POST)
+       if form.is_valid():
+           customer = form.save(commit=False)
+           customer.created_date = timezone.now()
+           customer.save()
+           customers = Customer.objects.filter(created_date__lte=timezone.now())
+           return render(request, 'portfolio/customer_list.html',
+                         {'customers': customers})
+   else:
+       form = CustomerForm()
+       # print("Else")
+   return render(request, 'portfolio/customer_new.html', {'form': form})
+
+
 @login_required
 def customer_edit(request, pk):
    customer = get_object_or_404(Customer, pk=pk)
@@ -150,4 +179,127 @@ def investment_delete(request, pk):
    return redirect('portfolio:investment_list')
 
 
+@login_required
+def portfolio(request,pk):
+   customer = get_object_or_404(Customer, pk=pk)
+   customers = Customer.objects.filter(created_date__lte=timezone.now())
+   investments =Investment.objects.filter(customer=pk)
+   stocks = Stock.objects.filter(customer=pk)
+   sum_recent_value = Investment.objects.filter(customer=pk).aggregate(Sum('recent_value'))
+   sum_acquired_value = Investment.objects.filter(customer=pk).aggregate(Sum('acquired_value'))
+   #overall_investment_results = sum_recent_value-sum_acquired_value
+   # Initialize the value of the stocks
+   sum_current_stocks_value = 0
+   sum_of_initial_stock_value = 0
 
+   # Loop through each stock and add the value to the total
+   for stock in stocks:
+        sum_current_stocks_value += stock.current_stock_value()
+        sum_of_initial_stock_value += stock.initial_stock_value()
+
+   return render(request, 'portfolio/portfolio.html', {'customers': customers,
+                                                       'investments': investments,
+                                                       'stocks': stocks,
+                                                       'sum_acquired_value': sum_acquired_value,
+                                                       'sum_recent_value': sum_recent_value,
+                                                        'sum_current_stocks_value': sum_current_stocks_value,
+                                                        'sum_of_initial_stock_value': sum_of_initial_stock_value,})
+
+# List at the end of the views.py
+# Lists all customers
+class CustomerList(APIView):
+
+    def get(self,request):
+        customers_json = Customer.objects.all()
+        serializer = CustomerSerializer(customers_json, many=True)
+        return Response(serializer.data)
+
+
+
+@login_required
+def customer_portfolio_pdf(request, pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    customers = Customer.objects.filter(created_date__lte=timezone.now())
+    investments = Investment.objects.filter(customer=pk)
+    stocks = Stock.objects.filter(customer=pk)
+    template = get_template('portfolio/customer_portfolio_pdf.html')
+    sum_recent_value = Investment.objects.filter(customer=pk).aggregate(Sum('recent_value'))
+    sum_acquired_value = Investment.objects.filter(customer=pk).aggregate(Sum('acquired_value'))
+    # overall_investment_results = sum_recent_value-sum_acquired_value
+    # Initialize the value of the stocks
+    sum_current_stocks_value = 0
+    sum_of_initial_stock_value = 0
+
+    # Loop through each stock and add the value to the total
+    for stock in stocks:
+        sum_current_stocks_value += stock.current_stock_value()
+        sum_of_initial_stock_value += stock.initial_stock_value()
+
+    context = {
+        'customer':customers,
+        'investments':investments,
+        'stocks':stocks,
+        'sum_acquired_value':sum_acquired_value,
+        'sum_recent_value':sum_recent_value,
+        'sum_current_stocks_value':sum_current_stocks_value,
+        'sum_of_initial_stock_value':sum_of_initial_stock_value,
+    }
+
+    #generate pdf
+    html = template.render(context)
+    pdf = render_to_pdf('portfolio/customer_portfolio_pdf.html', context)
+    if pdf:
+        response =HttpResponse(pdf, content_type='application/customer_portfolio_pdf')
+        filename = 'customer_portfolio_' + str(customer.cust_number) + '.pdf'
+        content = "inline; filename='%s'" % (filename)
+        download = request.GET.get("download")
+        if download:
+            content = "attachment; filename='%s'" % (filename)
+        response['Content-Disposition'] = content
+        return response
+    return HttpResponse("not found")
+
+
+@login_required
+def customer_portfolio_email_pdf(request, pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    customers = Customer.objects.filter(created_date__lte=timezone.now())
+    investments = Investment.objects.filter(customer=pk)
+    stocks = Stock.objects.filter(customer=pk)
+    template = get_template('portfolio/customer_portfolio_pdf.html')
+    sum_recent_value = Investment.objects.filter(customer=pk).aggregate(Sum('recent_value'))
+    sum_acquired_value = Investment.objects.filter(customer=pk).aggregate(Sum('acquired_value'))
+    # overall_investment_results = sum_recent_value-sum_acquired_value
+    # Initialize the value of the stocks
+    sum_current_stocks_value = 0
+    sum_of_initial_stock_value = 0
+
+    # Loop through each stock and add the value to the total
+    for stock in stocks:
+        sum_current_stocks_value += stock.current_stock_value()
+        sum_of_initial_stock_value += stock.initial_stock_value()
+
+    context = {
+        'customer':customers,
+        'investments':investments,
+        'stocks':stocks,
+        'sum_acquired_value': sum_acquired_value,
+        'sum_recent_value': sum_recent_value,
+        'sum_current_stocks_value': sum_current_stocks_value,
+        'sum_of_initial_stock_value': sum_of_initial_stock_value,
+    }
+
+    #create portfolio email
+    subject = 'Customer Portfolio'.format(customer.cust_number)
+    message = 'Please find attached your recent portfolio.'
+    email = EmailMessage(subject, message, 'msd8210.2018', [request.user.email])
+
+    #generate pdf
+    html = template.render(context)
+    pdf = render_to_pdf('portfolio/customer_portfolio_pdf.html', context)
+    if pdf:
+        filename = 'customer_portfolio_' + str(customer.cust_number) + '.pdf'
+        email.attach(filename, pdf, 'application/pdf')
+        email.send(fail_silently=False)
+        return HttpResponseRedirect(reverse('portfolio:customer_list'))
+    return HttpResponse("not found")
